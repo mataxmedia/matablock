@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MATABLOCK | Pencatat Blocking Pertunjukan</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/konva@9/konva.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f8f9fa; --panel-bg: #ffffff; --border: #e3e6e9;
+      --text-main: #1d2327; --text-muted: #6c767f;
+      --accent: #2f6f6a; --accent-hover: #255954; --accent-soft: #eaf2f1;
+      --btn-bg: #f0f2f3; --btn-hover: #e4eae4; --canvas-bg: #fbfcfc;
+      --workspace: #eef0f2; --ink: #2b3338;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Space Mono', sans-serif; }
+    body { background-color: var(--bg); color: var(--text-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    header { background: var(--panel-bg); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
+    h1 { font-size: 1.1rem; font-weight: 600; color: var(--text-main); letter-spacing: -0.02em; }
+    
+    .btn-group { display: flex; gap: 8px; align-items: center; }
+    
+    button { background: var(--btn-bg); color: var(--text-main); border: 1px solid transparent; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.2s ease; }
+    button:hover { background: var(--btn-hover); }
+    button.primary { background: var(--accent); color: white; }
+    button.primary:hover { background: var(--accent-hover); }
+    button.danger { background: #fbeaea; color: #b42318; }
+    button.danger:hover { background: #f6d5d5; }
+    
+    .toggle-group { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; background: var(--panel-bg); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-muted); }
+    .toggle-group input { cursor: pointer; accent-color: var(--accent); }
+
+    .app-body { display: flex; flex: 1; height: calc(100vh - 55px); }
+
+    .sidebar-left, .sidebar-right { background: var(--panel-bg); display: flex; flex-direction: column; padding: 20px; gap: 16px; }
+    .sidebar-left { width: 260px; border-right: 1px solid var(--border); }
+    .sidebar-right { width: 300px; border-left: 1px solid var(--border); overflow-y: auto; }
+    
+    .frame-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .frame-item { padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; color: var(--text-muted); transition: border-color 0.2s; }
+    .frame-item.active { border-color: var(--accent); background: var(--accent-soft); color: var(--text-main); font-weight: 500; }
+
+    .workspace { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--workspace); position: relative; }
+    #canvas-container { background: var(--canvas-bg); box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    
+    .panel-section { display: flex; flex-direction: column; gap: 8px; }
+    label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.05em; }
+    input[type="text"], input[type="number"], input[type="date"], select, textarea, input[type="color"] { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 10px; border-radius: 6px; font-size: 0.9rem; transition: border-color 0.2s; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    input:disabled { background: var(--btn-bg); color: #a1a1aa; cursor: not-allowed; }
+    textarea { height: 120px; resize: none; line-height: 1.5; }
+    input[type="color"] { padding: 2px; height: 38px; cursor: pointer; }
+    
+    .shortcuts { font-size: 0.75rem; color: var(--text-muted); background: var(--bg); padding: 12px; border-radius: 8px; line-height: 1.6; border: 1px solid var(--border); }
+
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(2px); }
+    .modal-content { background: var(--panel-bg); padding: 24px; border-radius: 12px; width: 420px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border); }
+    .modal-content h3 { font-size: 1.1rem; color: var(--text-main); font-weight: 600; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+
+    .field-label { display: block; margin-bottom: 4px; font-size: 0.7rem; }
+    .modal-section { font-size: 0.8rem; font-weight: 600; color: var(--accent); padding-top: 4px; border-top: 1px solid var(--border); }
+    .modal-section:first-of-type { border-top: 0; padding-top: 0; }
+    .frame-item > span { display: flex; flex-direction: column; min-width: 0; }
+    .frame-sub { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+
+    /* --- Animasi loading cetak PDF --- */
+    .loader-overlay { display: none; position: fixed; inset: 0; background: rgba(29,35,39,0.45); backdrop-filter: blur(3px); justify-content: center; align-items: center; z-index: 200; }
+    .loader-overlay.show { display: flex; }
+    .loader-card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; width: 320px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+    .mini-stage { position: relative; width: 168px; height: 96px; border: 1.5px solid var(--border); border-radius: 6px; background: #fff;
+      background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 24px 24px; overflow: hidden; margin-bottom: 6px; }
+    .mini-stage .dot { position: absolute; left: 0; top: 0; width: 14px; height: 14px; border-radius: 50%; animation: blockingMove 3.6s ease-in-out infinite; }
+    .mini-stage .d1 { background: var(--accent); --x1: 16px; --y1: 14px; --x2: 124px; --y2: 22px; --x3: 70px; --y3: 70px; }
+    .mini-stage .d2 { background: var(--ink); --x1: 130px; --y1: 70px; --x2: 30px; --y2: 60px; --x3: 96px; --y3: 14px; animation-delay: -1.2s; }
+    .mini-stage .d3 { background: #9aa4ab; --x1: 60px; --y1: 40px; --x2: 100px; --y2: 70px; --x3: 24px; --y3: 24px; animation-delay: -2.4s; }
+    @keyframes blockingMove {
+      0%, 100% { transform: translate(var(--x1), var(--y1)); }
+      33% { transform: translate(var(--x2), var(--y2)); }
+      66% { transform: translate(var(--x3), var(--y3)); }
+    }
+    .loader-title { font-size: 0.95rem; font-weight: 600; color: var(--text-main); text-align: center; }
+    .loader-sub { font-size: 0.78rem; color: var(--text-muted); text-align: center; min-height: 1.1em; }
+    .loader-bar { width: 100%; height: 6px; background: var(--btn-bg); border-radius: 999px; overflow: hidden; margin-top: 4px; }
+    .loader-fill { width: 100%; height: 100%; background: var(--accent); border-radius: 999px; transform-origin: left center; transform: scaleX(0); transition: transform 0.35s ease; }
+    .loader-count { font-size: 0.75rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    @media (prefers-reduced-motion: reduce) { .mini-stage .dot { animation: none; transform: translate(var(--x1), var(--y1)); } .loader-fill { transition: none; } }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>MATA BLOCK v.0.1 |<span> Pencatat Blocking Pertunjukan</span></h1>
+    <div class="btn-group">
+      <button onclick="document.getElementById('importFile').click()" title="Buka Proyek .json">Import Proyek</button>
+      <button onclick="exportProject()" title="Simpan Proyek .json">Simpan Proyek</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importProject(event)">
+      
+      <span style="border-left: 1px solid var(--border); margin: 0 4px; height: 20px;"></span>
+      <button onclick="undo()" title="Undo (Ctrl+Z)">⤺</button>
+      <button onclick="redo()" title="Redo (Ctrl+Y)">⤻</button>
+      <span style="border-left: 1px solid var(--border); margin: 0 4px; height: 20px;"></span>
+      
+      <div class="toggle-group"><input type="checkbox" id="toggleGrid" checked onchange="toggleFeature('grid')"> <label for="toggleGrid">Grid</label></div>
+      <div class="toggle-group"><input type="checkbox" id="toggleOnion" checked onchange="toggleFeature('onion')"> <label for="toggleOnion">Bayangan</label></div>
+      
+      <span style="border-left: 1px solid var(--border); margin: 0 4px; height: 20px;"></span>
+      <button onclick="addToken('actor')">Tambah Aktor</button>
+      <button onclick="addToken('prop')">Tambah Properti</button>
+      <span style="border-left: 1px solid var(--border); margin: 0 4px; height: 20px;"></span>
+      
+      <button onclick="openModal('metaModal')">Atur Proyek</button>
+      <button class="primary" onclick="openModal('exportModal')">Cetak PDF</button>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <div class="sidebar-left">
+      <label>Timeline Adegan</label>
+      <button class="primary" style="width: 100%;" onclick="addNewFrame()">+ Adegan Baru</button>
+      <div class="frame-list" id="frameList"></div>
+      <button class="primary" style="width: 100%; background: var(--ink);" onclick="playAnimation()">▶ Putar Adegan</button>
+      <div class="shortcuts">
+        <b>Pintasan Keyboard:</b><br>
+        <code>Shift+Click</code> : Multi Seleksi<br>
+        <code>Drag Area</code> : Seleksi Kotak<br>
+        <code>Ctrl+Z</code> : Undo<br>
+        <code>Space</code> : Mulai Animasi<br>
+        <code>←</code> <code>→</code> : Pindah Adegan<br>
+        <code>Del/Bsp</code> : Hapus Item
+      </div>
+    </div>
+
+    <div class="workspace">
+      <div id="canvas-container"></div>
+    </div>
+
+    <div class="sidebar-right">
+      <div class="panel-section">
+        <label>Info Adegan</label>
+        <div class="row">
+          <div><label class="field-label">Babak</label><input type="text" id="frameAct" placeholder="mis. Babak I" oninput="updateFrameField('act', this.value)"></div>
+          <div><label class="field-label">Durasi</label><input type="text" id="frameDuration" placeholder="mis. 3 menit" oninput="updateFrameField('duration', this.value)"></div>
+        </div>
+        <div><label class="field-label">Judul Adegan</label><input type="text" id="frameTitle" placeholder="mis. Kedatangan di dermaga" oninput="updateFrameField('title', this.value)"></div>
+        <div><label class="field-label">Cue Teknis</label><input type="text" id="frameCue" placeholder="Tata cahaya, bunyi, perpindahan set" oninput="updateFrameField('cue', this.value)"></div>
+      </div>
+      <hr style="border: 0; border-top: 1px solid var(--border); margin: 8px 0;">
+      <div class="panel-section">
+        <label>Catatan Naskah / Instruksi</label>
+        <textarea id="frameNote" placeholder="Tuliskan dialog atau catatan pergerakan di sini..." oninput="updateFrameNote(this.value)"></textarea>
+      </div>
+      <hr style="border: 0; border-top: 1px solid var(--border); margin: 8px 0;">
+      <div class="panel-section" id="inspector" style="display:none;">
+        <label>Pengaturan Objek</label>
+        <div>
+          <label style="font-size: 0.7rem; display:block; margin-bottom: 4px;">Nama Label:</label>
+          <input type="text" id="tokenLabel" oninput="updateSelectedToken()">
+        </div>
+        <div>
+          <label style="font-size: 0.7rem; display:block; margin-top: 8px; margin-bottom: 4px;">Warna Penanda:</label>
+          <input type="color" id="tokenColor" onchange="updateSelectedToken()">
+        </div>
+        <button class="danger" style="margin-top: 16px;" onclick="deleteSelectedToken()">Hapus Objek</button>
+      </div>
+      <div id="noSelection" style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 40px; line-height: 1.5;">
+        Pilih satu atau lebih objek pada panggung untuk mengubah propertinya.
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="metaModal">
+    <div class="modal-content" style="width: 520px;">
+      <h3>Pengaturan Proyek & Panggung</h3>
+
+      <div class="modal-section">Identitas Produksi</div>
+      <div class="row">
+        <div class="panel-section"><label>Judul Pertunjukan</label><input type="text" id="metaTitle"></div>
+        <div class="panel-section"><label>Penggarap</label><input type="text" id="metaDirector"></div>
+      </div>
+      <div class="row">
+        <div class="panel-section"><label>Produksi / Kelompok</label><input type="text" id="metaGroup" placeholder="mis. Komunitas Seni Nan Tumpah"></div>
+        <div class="panel-section"><label>Penata Panggung / Artistik</label><input type="text" id="metaDesigner"></div>
+      </div>
+
+      <div class="modal-section">Pementasan</div>
+      <div class="row">
+        <div class="panel-section"><label>Lokasi / Venue</label><input type="text" id="metaVenue" placeholder="mis. Gedung Kesenian"></div>
+        <div class="panel-section"><label>Kota</label><input type="text" id="metaCity" placeholder="mis. Padang"></div>
+      </div>
+      <div class="panel-section"><label>Tanggal Pentas</label><input type="date" id="metaShowDate"></div>
+
+      <div class="modal-section">Versi Desain</div>
+      <div class="row">
+        <div class="panel-section"><label>Draf Desain Ke-</label><input type="number" id="metaDraftNo" min="1" step="1"></div>
+        <div class="panel-section"><label>Status</label>
+          <select id="metaStatus">
+            <option value="Draf">Draf</option>
+            <option value="Revisi">Revisi</option>
+            <option value="Final">Final</option>
+          </select>
+        </div>
+        <div class="panel-section"><label>Tanggal Draf</label><input type="date" id="metaDraftDate"></div>
+      </div>
+
+      <div class="modal-section">Panggung</div>
+      <div class="panel-section">
+        <label>Bentuk Panggung</label>
+        <select id="stageShape">
+          <option value="proscenium">Prosenium (Penonton 1 Sisi)</option>
+          <option value="thrust">Thrust (Penonton 3 Sisi)</option>
+          <option value="arena">Arena (Penonton 4 Sisi)</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="panel-section"><label>Lebar (Meter)</label><input type="number" id="stageW" min="2" max="50" step="0.5"></div>
+        <div class="panel-section"><label>Kedalaman (Meter)</label><input type="number" id="stageD" min="2" max="50" step="0.5"></div>
+      </div>
+      <div class="modal-actions"><button onclick="closeModal('metaModal')">Batal</button><button class="primary" onclick="saveMetaModal()">Simpan & Terapkan</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal-content">
+      <h3>Cetak Dokumen PDF</h3>
+      <div class="panel-section">
+        <label>Ukuran Kertas PDF</label>
+        <select id="pdfPaper">
+          <option value="a4">A4 (Standar)</option>
+          <option value="a3">A3 (Lebar)</option>
+        </select>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">Dokumen akan diekspor dalam orientasi Lanskap dengan resolusi setara 300dpi. Setiap halaman memuat kotak metadata, kanvas adegan, catatan, dan legenda.</div>
+      <div class="modal-actions"><button onclick="closeModal('exportModal')">Batal</button><button class="primary" onclick="processPDF()">Unduh PDF</button></div>
+    </div>
+  </div>
+
+  <div class="loader-overlay" id="pdfLoader" role="alertdialog" aria-live="polite" aria-label="Sedang membuat PDF">
+    <div class="loader-card">
+      <div class="mini-stage" aria-hidden="true"><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span></div>
+      <div class="loader-title" id="loaderTitle">Menyiapkan dokumen…</div>
+      <div class="loader-sub" id="loaderSub">&nbsp;</div>
+      <div class="loader-bar"><div class="loader-fill" id="loaderFill"></div></div>
+      <div class="loader-count" id="loaderCount">0%</div>
+    </div>
+  </div>
+
+  <script>
+    const width = 800; const height = 500;
+    const stage = new Konva.Stage({ container: 'canvas-container', width, height });
+
+    const bgSolidLayer = new Konva.Layer();
+    const gridLayer = new Konva.Layer();
+    const onionLayer = new Konva.Layer();
+    const vectorLayer = new Konva.Layer();
+    const mainLayer = new Konva.Layer();
+    
+    stage.add(bgSolidLayer); stage.add(gridLayer); stage.add(onionLayer); stage.add(vectorLayer); stage.add(mainLayer);
+
+    const bgSolid = new Konva.Rect({ x: 0, y: 0, width: width, height: height, fill: '#fbfcfc' });
+    bgSolidLayer.add(bgSolid); bgSolidLayer.draw();
+    
+    const tr = new Konva.Transformer({ rotateEnabled: true, enabledAnchors: [], borderStroke: '#2f6f6a', anchorFill: '#2f6f6a' });
+    mainLayer.add(tr);
+
+    // Kotak Seleksi Multi-Select
+    const selectionRect = new Konva.Rect({
+      fill: 'rgba(47, 111, 106, 0.15)',
+      stroke: '#2f6f6a',
+      strokeWidth: 1,
+      visible: false,
+      listening: false
+    });
+    mainLayer.add(selectionRect);
+
+    let frames = [];
+    let currentFrameIndex = 0;
+    let selectedTokenIds = []; // Diperbarui menjadi Array
+    let isPlaying = false;
+    let isSelecting = false;
+    let selX1, selY1, selX2, selY2;
+    
+    let config = { grid: true, onion: true, vector: true };
+    let projectMeta = { title: '', director: '', group: '', designer: '', venue: '', city: '', showDate: '', draftNo: 1, status: 'Draf', draftDate: '' };
+    let stageConfig = { shape: 'proscenium', widthM: 10, depthM: 6 };
+
+    // --- MANAJEMEN UNDO & REDO ---
+    let historyStack = [];
+    let historyStep = -1;
+
+    function pushHistory() {
+      if (historyStep < historyStack.length - 1) historyStack = historyStack.slice(0, historyStep + 1);
+      historyStack.push(JSON.stringify({ frames, currentIndex: currentFrameIndex }));
+      if (historyStack.length > 30) historyStack.shift(); else historyStep++;
+    }
+
+    function undo() { if (isPlaying) return; if (historyStep > 0) { historyStep--; loadHistoryState(); } }
+    function redo() { if (isPlaying) return; if (historyStep < historyStack.length - 1) { historyStep++; loadHistoryState(); } }
+    function loadHistoryState() {
+      const state = JSON.parse(historyStack[historyStep]);
+      frames = state.frames; currentFrameIndex = state.currentIndex;
+      renderCurrentFrame(); saveToLocal();
+    }
+
+    // --- INISIALISASI ---
+    // Selalu mulai dari halaman kosong; hapus sisa data lama dari versi sebelumnya
+    try { localStorage.removeItem('blocking_pro_save_v8'); } catch(e) {}
+    frames = [{ id: Date.now(), note: "Frame 1: Posisi awal.", tokens: [] }];
+    pushHistory(); 
+
+    // --- EVENT STAGE: MULTI SELECT BOX ---
+    stage.on('mousedown touchstart', (e) => {
+      if (isPlaying) return;
+      if (e.target !== stage && e.target.getLayer() !== gridLayer && e.target !== bgSolid) return; 
+      
+      e.cancelBubble = true;
+      isSelecting = true;
+      const pos = stage.getPointerPosition();
+      selX1 = pos.x; selY1 = pos.y;
+      
+      selectionRect.width(0); selectionRect.height(0);
+      selectionRect.position({x: selX1, y: selY1});
+      selectionRect.visible(true);
+      selectionRect.moveToTop(); 
+      mainLayer.draw();
+    });
+    
+    stage.on('mousemove touchmove', (e) => {
+      if (!isSelecting) return;
+      const pos = stage.getPointerPosition();
+      selX2 = pos.x; selY2 = pos.y;
+      
+      selectionRect.setAttrs({
+        x: Math.min(selX1, selX2), y: Math.min(selY1, selY2),
+        width: Math.abs(selX2 - selX1), height: Math.abs(selY2 - selY1),
+      });
+      mainLayer.draw();
+    });
+    
+    stage.on('mouseup touchend', (e) => {
+      if (!isSelecting) {
+        if (e.target === stage || e.target.getLayer() === gridLayer || e.target === bgSolid) {
+          selectedTokenIds = [];
+          tr.nodes([]);
+          updateInspector();
+          mainLayer.draw();
+        }
+        return;
+      }
+      
+      isSelecting = false;
+      selectionRect.visible(false);
+      
+      const box = selectionRect.getClientRect();
+      if (!e.evt.shiftKey) selectedTokenIds = [];
+      
+      const nodes = mainLayer.getChildren(node => node.id() && node.id().startsWith('t_'));
+      nodes.forEach(node => {
+        const rect = node.getClientRect();
+        // Cek irisan manual
+        const intersect = !(
+          rect.x > box.x + box.width ||
+          rect.x + rect.width < box.x ||
+          rect.y > box.y + box.height ||
+          rect.y + rect.height < box.y
+        );
+        if (intersect && !selectedTokenIds.includes(node.id())) {
+          selectedTokenIds.push(node.id());
+        }
+      });
+      
+      syncTransformer();
+    });
+
+    // --- EVENT TRANSFORMER: ROTASI MULTIPLE OBJECTS ---
+    tr.on('transformend', () => {
+      selectedTokenIds.forEach(id => {
+        const node = mainLayer.findOne('#' + id);
+        const token = frames[currentFrameIndex].tokens.find(t => t.id === id);
+        if (token && node) {
+          token.x = node.x();
+          token.y = node.y();
+          token.rotation = node.rotation();
+        }
+      });
+      pushHistory();
+      saveToLocal();
+      drawVectors();
+    });
+
+    // --- SISTEM MANAJEMEN ADEGAN ---
+    function addNewFrame() { 
+      if (isPlaying) return; 
+      try {
+        const currentTokens = frames[currentFrameIndex].tokens || [];
+        frames.push({ id: Date.now(), note: `Adegan ${frames.length + 1}: `, tokens: JSON.parse(JSON.stringify(currentTokens)) });
+        currentFrameIndex = frames.length - 1;
+        pushHistory(); renderCurrentFrame(); saveToLocal();
+      } catch (err) {}
+    }
+
+    function switchFrame(index) { if (isPlaying) return; currentFrameIndex = index; pushHistory(); renderCurrentFrame(); saveToLocal(); }
+    function deleteFrame(e, index) { 
+      e.stopPropagation(); if (isPlaying || frames.length <= 1) return; 
+      frames.splice(index, 1); 
+      if (currentFrameIndex >= frames.length) currentFrameIndex = frames.length - 1; 
+      pushHistory(); renderCurrentFrame(); saveToLocal(); 
+    }
+
+    function addToken(type) { 
+      if (isPlaying) return;
+      if(!frames[currentFrameIndex].tokens) frames[currentFrameIndex].tokens = [];
+      const newId = 't_' + Date.now();
+      frames[currentFrameIndex].tokens.push({ 
+        id: newId, label: type === 'actor' ? 'Aktor' : 'Properti', color: type === 'actor' ? '#2f6f6a' : '#8a949c', 
+        x: width/2, y: height/2, rotation: 0, type 
+      }); 
+      selectedTokenIds = [newId]; // Fokus ke item baru
+      pushHistory(); renderCurrentFrame(); saveToLocal(); 
+    }
+
+
+    // --- RENDER VISUAL PANGGUNG ---
+    function drawGridLayer() {
+      gridLayer.destroyChildren();
+      const ppmW = (width - 100) / stageConfig.widthM;
+      const ppmH = (height - 100) / stageConfig.depthM;
+      const ppm = Math.min(ppmW, ppmH);
+      const pW = stageConfig.widthM * ppm; const pH = stageConfig.depthM * ppm;
+      const sX = (width - pW) / 2; const sY = (height - pH) / 2;
+
+      gridLayer.add(new Konva.Rect({ x: sX, y: sY, width: pW, height: pH, stroke: '#d1d5db', strokeWidth: 2, fill: '#ffffff' }));
+      const lf = { align: 'center', fill: '#9ca3af', fontSize: 11, fontStyle: '600' };
+      
+      if(stageConfig.shape === 'proscenium') {
+        gridLayer.add(new Konva.Text({ ...lf, text: 'PENONTON', x: sX, y: sY + pH + 10, width: pW }));
+        gridLayer.add(new Konva.Text({ ...lf, text: 'UPSTAGE', x: sX, y: sY - 20, width: pW, fill: '#d1d5db' }));
+      } else if (stageConfig.shape === 'thrust') {
+        gridLayer.add(new Konva.Text({ ...lf, text: 'PENONTON (DEPAN)', x: sX, y: sY + pH + 10, width: pW }));
+        gridLayer.add(new Konva.Text({ ...lf, text: 'PENONTON', x: sX - 25, y: sY + (pH/2) + 35, rotation: -90 }));
+        gridLayer.add(new Konva.Text({ ...lf, text: 'PENONTON', x: sX + pW + 15, y: sY + (pH/2) - 35, rotation: 90 }));
+        gridLayer.add(new Konva.Text({ ...lf, text: 'BACKSTAGE', x: sX, y: sY - 20, width: pW, fill: '#d1d5db' }));
+      } else if (stageConfig.shape === 'arena') {
+        gridLayer.add(new Konva.Text({ ...lf, text: 'PENONTON UTARA', x: sX, y: sY - 20, width: pW }));
+        gridLayer.add(new Konva.Text({ ...lf, text: 'PENONTON SELATAN', x: sX, y: sY + pH + 10, width: pW }));
+        gridLayer.add(new Konva.Text({ ...lf, text: 'BARAT', x: sX - 25, y: sY + (pH/2) + 20, rotation: -90 }));
+        gridLayer.add(new Konva.Text({ ...lf, text: 'TIMUR', x: sX + pW + 15, y: sY + (pH/2) - 20, rotation: 90 }));
+      }
+
+      if (config.grid) {
+        for (let i = 1; i < stageConfig.widthM; i++) gridLayer.add(new Konva.Line({ points: [sX + (i * ppm), sY, sX + (i * ppm), sY + pH], stroke: '#e5e7eb', strokeWidth: 1 }));
+        for (let j = 1; j < stageConfig.depthM; j++) gridLayer.add(new Konva.Line({ points: [sX, sY + (j * ppm), sX + pW, sY + (j * ppm)], stroke: '#e5e7eb', strokeWidth: 1 }));
+      }
+      gridLayer.draw();
+    }
+
+    function createTokenVisual(token) {
+      const group = new Konva.Group({ x: token.x, y: token.y, rotation: token.rotation || 0, id: token.id });
+      if (token.type === 'actor') {
+        group.add(new Konva.Circle({ radius: 18, fill: token.color, stroke: '#fff', strokeWidth: 2 }));
+        group.add(new Konva.Circle({ x: 0, y: -18, radius: 4, fill: '#fff' }));
+        group.add(new Konva.Text({ text: token.label, fontSize: 11, fill: '#374151', align: 'center', y: 22, width: 100, x: -50, fontStyle: '600' }));
+      } else {
+        group.add(new Konva.Rect({ x: -20, y: -15, width: 40, height: 30, fill: token.color, stroke: '#fff', strokeWidth: 1, cornerRadius: 4 }));
+        group.add(new Konva.Text({ text: token.label, fontSize: 9, fill: '#fff', align: 'center', y: -4, width: 40, x: -20 }));
+      }
+      return group;
+    }
+
+    function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+    function fillFrameFields() {
+      const f = frames[currentFrameIndex] || {};
+      document.getElementById('frameAct').value = f.act || '';
+      document.getElementById('frameDuration').value = f.duration || '';
+      document.getElementById('frameTitle').value = f.title || '';
+      document.getElementById('frameCue').value = f.cue || '';
+    }
+    function updateFrameField(key, val) {
+      if (isPlaying) return;
+      frames[currentFrameIndex][key] = val;
+      if (key === 'title') renderFrameListUI();
+      saveToLocal();
+    }
+
+    function renderFrameListUI() {
+      const container = document.getElementById('frameList'); container.innerHTML = '';
+      frames.forEach((f, idx) => {
+        const div = document.createElement('div'); div.className = `frame-item ${idx === currentFrameIndex ? 'active' : ''}`;
+        div.onclick = () => switchFrame(idx);
+        div.innerHTML = `<span><span>Adegan ${idx + 1}</span>${f.title ? `<small class="frame-sub">${escHtml(f.title)}</small>` : ''}</span> ${frames.length > 1 ? `<button style="background:transparent; padding:0; font-size:1rem; color:#9ca3af; border:none;" onclick="deleteFrame(event, ${idx})">✕</button>` : ''}`;
+        container.appendChild(div);
+      });
+    }
+
+    function syncTransformer() {
+      const selectedNodes = selectedTokenIds.map(id => mainLayer.findOne('#' + id)).filter(Boolean);
+      tr.nodes(selectedNodes);
+      updateInspector();
+      mainLayer.draw();
+    }
+
+    function renderCurrentFrame() {
+      tr.nodes([]); selectedTokenIds = []; updateInspector();
+      mainLayer.getChildren(node => node.id() && node.id().startsWith('t_')).forEach(node => node.destroy());
+      
+      const currentTokens = frames[currentFrameIndex].tokens || [];
+      currentTokens.forEach(token => {
+        const group = createTokenVisual(token); 
+        group.draggable(!isPlaying);
+        
+        // EVENT: MULTI-DRAG SYNC
+        group.on('dragstart', function(e) {
+          if (isPlaying) return;
+          if (!selectedTokenIds.includes(this.id())) {
+            selectedTokenIds = [this.id()];
+            syncTransformer();
+          }
+          selectedTokenIds.forEach(id => {
+            const n = mainLayer.findOne('#' + id);
+            if (n) { n.setAttr('dragStartX', n.x()); n.setAttr('dragStartY', n.y()); }
+          });
+        });
+
+        group.on('dragmove', function(e) {
+          if (isPlaying) return;
+          const dx = this.x() - this.getAttr('dragStartX');
+          const dy = this.y() - this.getAttr('dragStartY');
+          
+          selectedTokenIds.forEach(id => {
+            if (id === this.id()) return;
+            const n = mainLayer.findOne('#' + id);
+            if (n) n.position({ x: n.getAttr('dragStartX') + dx, y: n.getAttr('dragStartY') + dy });
+          });
+        });
+
+        group.on('dragend', function(e) { 
+          if(isPlaying) return;
+          selectedTokenIds.forEach(id => {
+            const node = mainLayer.findOne('#' + id);
+            const tok = frames[currentFrameIndex].tokens.find(t => t.id === id);
+            if (tok && node) { tok.x = node.x(); tok.y = node.y(); }
+          });
+          pushHistory(); saveToLocal(); drawVectors(); 
+        });
+
+        group.on('mousedown touchstart', (e) => {
+          if (isPlaying) return;
+          if (e.evt.shiftKey) return; // ditangani oleh click
+          if (!selectedTokenIds.includes(this.id())) {
+            selectedTokenIds = [this.id()];
+            syncTransformer();
+          }
+        });
+
+        group.on('click tap', (e) => { 
+          if(isPlaying) return;
+          e.cancelBubble = true; 
+          
+          if (e.evt.shiftKey) {
+            if (selectedTokenIds.includes(this.id())) {
+              selectedTokenIds = selectedTokenIds.filter(id => id !== this.id());
+            } else {
+              selectedTokenIds.push(this.id());
+            }
+            syncTransformer();
+          } else {
+            if (selectedTokenIds.length > 1) {
+              selectedTokenIds = [this.id()];
+              syncTransformer();
+            }
+          }
+        });
+        
+        mainLayer.add(group);
+      });
+      
+      mainLayer.draw(); drawOnionSkin(); drawVectors(); renderFrameListUI();
+      document.getElementById('frameNote').value = frames[currentFrameIndex].note || '';
+      fillFrameFields();
+    }
+
+    function drawOnionSkin() {
+      onionLayer.destroyChildren(); if (!config.onion || currentFrameIndex === 0 || isPlaying) { onionLayer.draw(); return; }
+      const prevTokens = frames[currentFrameIndex - 1].tokens || [];
+      prevTokens.forEach(token => { const group = createTokenVisual(token); group.opacity(0.15); group.listening(false); onionLayer.add(group); });
+      onionLayer.draw();
+    }
+
+    function drawVectors() {
+      vectorLayer.destroyChildren(); if (!config.vector || currentFrameIndex === 0 || isPlaying) { vectorLayer.draw(); return; }
+      const prevTokens = frames[currentFrameIndex - 1].tokens || [];
+      const currentTokens = frames[currentFrameIndex].tokens || [];
+      currentTokens.forEach(curr => {
+        const prev = prevTokens.find(t => t.id === curr.id);
+        if (prev && (prev.x !== curr.x || prev.y !== curr.y)) {
+          vectorLayer.add(new Konva.Arrow({ points: [prev.x, prev.y, curr.x, curr.y], pointerLength: 6, pointerWidth: 6, fill: curr.color, stroke: curr.color, strokeWidth: 2, dash: [4, 4], opacity: 0.4, listening: false }));
+        }
+      });
+      vectorLayer.draw();
+    }
+
+    // --- INTERAKSI KANVAS & INSPECTOR ---
+    function updateInspector() {
+      const pnl = document.getElementById('inspector'), noSel = document.getElementById('noSelection');
+      const labelInput = document.getElementById('tokenLabel');
+      const colorInput = document.getElementById('tokenColor');
+      
+      if (selectedTokenIds.length === 0) { pnl.style.display = 'none'; noSel.style.display = 'block'; return; }
+      
+      pnl.style.display = 'flex'; noSel.style.display = 'none'; 
+      
+      if (selectedTokenIds.length === 1) {
+        const t = frames[currentFrameIndex].tokens.find(t => t.id === selectedTokenIds[0]);
+        if (t) { 
+          labelInput.value = t.label; 
+          labelInput.disabled = false;
+          colorInput.value = t.color; 
+        }
+      } else {
+        labelInput.value = "<Multi-Seleksi>";
+        labelInput.disabled = true;
+        colorInput.value = "#9ca3af"; // Default abu-abu netral untuk multi-color
+      }
+    }
+    
+    function updateSelectedToken() {
+      if (isPlaying || selectedTokenIds.length === 0) return;
+      
+      const newLabel = document.getElementById('tokenLabel').value;
+      const newColor = document.getElementById('tokenColor').value;
+      
+      selectedTokenIds.forEach(id => {
+        const t = frames[currentFrameIndex].tokens.find(t => t.id === id);
+        if (t) {
+          if (selectedTokenIds.length === 1) t.label = newLabel;
+          t.color = newColor;
+          
+          const group = mainLayer.findOne('#' + id);
+          if (group) { 
+            if (t.type === 'actor') { 
+              if (selectedTokenIds.length === 1) group.find('Text')[0].text(t.label); 
+              group.find('Circle')[0].fill(t.color); 
+            } else { 
+              if (selectedTokenIds.length === 1) group.find('Text')[0].text(t.label); 
+              group.find('Rect')[0].fill(t.color); 
+            } 
+          }
+        }
+      });
+      
+      mainLayer.draw();
+      pushHistory(); saveToLocal();
+    }
+
+    function deleteSelectedToken() { 
+      if (isPlaying || selectedTokenIds.length === 0) return; 
+      frames[currentFrameIndex].tokens = frames[currentFrameIndex].tokens.filter(t => !selectedTokenIds.includes(t.id)); 
+      selectedTokenIds = [];
+      syncTransformer();
+      pushHistory(); renderCurrentFrame(); saveToLocal(); 
+    }
+    
+    function updateFrameNote(val) { if (isPlaying) return; frames[currentFrameIndex].note = val; saveToLocal(); }
+    function toggleFeature(feature) { config[feature] = document.getElementById('toggle' + feature.charAt(0).toUpperCase() + feature.slice(1)).checked; drawGridLayer(); renderCurrentFrame(); }
+    function saveToLocal() { /* penyimpanan otomatis dinonaktifkan: refresh = halaman kosong */ }
+
+    function openModal(id) { 
+      if(id === 'metaModal') { 
+        document.getElementById('metaTitle').value = projectMeta.title; 
+        document.getElementById('metaDirector').value = projectMeta.director; 
+        document.getElementById('metaGroup').value = projectMeta.group || '';
+        document.getElementById('metaDesigner').value = projectMeta.designer || '';
+        document.getElementById('metaVenue').value = projectMeta.venue || '';
+        document.getElementById('metaCity').value = projectMeta.city || '';
+        document.getElementById('metaShowDate').value = projectMeta.showDate || '';
+        document.getElementById('metaDraftNo').value = projectMeta.draftNo || 1;
+        document.getElementById('metaStatus').value = projectMeta.status || 'Draf';
+        document.getElementById('metaDraftDate').value = projectMeta.draftDate || '';
+        document.getElementById('stageShape').value = stageConfig.shape; 
+        document.getElementById('stageW').value = stageConfig.widthM; 
+        document.getElementById('stageD').value = stageConfig.depthM; 
+      }
+      document.getElementById(id).style.display = 'flex'; 
+    }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    
+    function saveMetaModal() { 
+      projectMeta.title = document.getElementById('metaTitle').value; 
+      projectMeta.director = document.getElementById('metaDirector').value; 
+      projectMeta.group = document.getElementById('metaGroup').value;
+      projectMeta.designer = document.getElementById('metaDesigner').value;
+      projectMeta.venue = document.getElementById('metaVenue').value;
+      projectMeta.city = document.getElementById('metaCity').value;
+      projectMeta.showDate = document.getElementById('metaShowDate').value;
+      projectMeta.draftNo = parseInt(document.getElementById('metaDraftNo').value, 10) || 1;
+      projectMeta.status = document.getElementById('metaStatus').value;
+      projectMeta.draftDate = document.getElementById('metaDraftDate').value;
+      stageConfig.shape = document.getElementById('stageShape').value; 
+      stageConfig.widthM = parseFloat(document.getElementById('stageW').value) || 10; 
+      stageConfig.depthM = parseFloat(document.getElementById('stageD').value) || 6;
+      saveToLocal(); drawGridLayer(); renderCurrentFrame(); closeModal('metaModal'); 
+    }
+    
+    function exportProject() {
+      const payload = JSON.stringify({ frames, meta: projectMeta, stage: stageConfig }, null, 2);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+      a.download = `${projectMeta.title ? projectMeta.title.replace(/\s+/g, '-').toLowerCase() : 'blocking-project'}.json`; a.click();
+    }
+    
+    function importProject(e) {
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const parsed = JSON.parse(evt.target.result);
+          if (parsed.frames) { 
+            frames = parsed.frames; projectMeta = Object.assign({}, projectMeta, parsed.meta || {}); stageConfig = parsed.stage || stageConfig; 
+            currentFrameIndex = 0; historyStack = []; historyStep = -1; selectedTokenIds = []; 
+            pushHistory(); drawGridLayer(); renderCurrentFrame(); saveToLocal(); 
+          } else alert("Format file tidak valid.");
+        } catch (err) { alert("Gagal membaca file proyek."); }
+        document.getElementById('importFile').value = '';
+      }; reader.readAsText(file);
+    }
+
+    // --- ANIMASI DI LAYAR ---
+    async function playAnimation() {
+      if(isPlaying || frames.length < 2) return;
+      isPlaying = true;
+      tr.nodes([]); selectedTokenIds = []; updateInspector();
+      onionLayer.destroyChildren(); vectorLayer.destroyChildren(); onionLayer.draw(); vectorLayer.draw();
+
+      for(let i = 0; i < frames.length; i++) {
+        currentFrameIndex = i; renderFrameListUI(); document.getElementById('frameNote').value = frames[i].note || ''; fillFrameFields();
+        if (i > 0) {
+          await new Promise(resolve => {
+            const prev = frames[i-1].tokens || []; const curr = frames[i].tokens || [];
+            let tweensCount = curr.length;
+            if(tweensCount === 0) resolve();
+            curr.forEach(tCurr => {
+              const node = mainLayer.findOne('#' + tCurr.id); const tPrev = prev.find(t => t.id === tCurr.id);
+              if(node && tPrev && (tPrev.x !== tCurr.x || tPrev.y !== tCurr.y || tPrev.rotation !== tCurr.rotation)) {
+                node.position({x: tPrev.x, y: tPrev.y}); node.rotation(tPrev.rotation);
+                new Konva.Tween({ node, duration: 0.8, x: tCurr.x, y: tCurr.y, rotation: tCurr.rotation, easing: Konva.Easings.EaseInOut, onFinish: () => { tweensCount--; if(tweensCount <= 0) resolve(); } }).play();
+              } else { tweensCount--; if(tweensCount <= 0) resolve(); }
+            });
+          });
+          await new Promise(r => setTimeout(r, 400)); 
+        }
+      }
+      isPlaying = false; renderCurrentFrame();
+    }
+
+
+    // --- Ekspor PDF ---
+    let isExporting = false;
+    const nextPaint = () => new Promise(r => setTimeout(r, 50));
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    function showLoader() { document.getElementById('pdfLoader').classList.add('show'); setLoader(0, 1, 'Menyiapkan dokumen…', ''); }
+    function hideLoader() { document.getElementById('pdfLoader').classList.remove('show'); }
+    function setLoader(done, total, title, sub) {
+      const p = total > 0 ? done / total : 0;
+      document.getElementById('loaderFill').style.transform = `scaleX(${p})`;
+      document.getElementById('loaderCount').textContent = Math.round(p * 100) + '%';
+      document.getElementById('loaderTitle').textContent = title;
+      document.getElementById('loaderSub').innerHTML = sub || '&nbsp;';
+    }
+
+    function hexToRgb(hex) {
+      const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+      if (!m) return [156, 163, 175];
+      const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    function fmtDate(s) {
+      if (!s) return '-';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      return s;
+    }
+    function collectLegend() {
+      const latest = {}; frames.forEach(f => (f.tokens || []).forEach(t => { latest[t.id] = t; }));
+      const seen = new Set(); const items = [];
+      Object.values(latest).forEach(t => {
+        const key = `${t.type}|${t.label}|${t.color}`;
+        if (!seen.has(key)) { seen.add(key); items.push({ type: t.type, label: t.label || '-', color: t.color }); }
+      });
+      return items;
+    }
+
+    function drawPdfPage(pdf, u, i, dataUrl, legend) {
+      const pdfW = pdf.internal.pageSize.getWidth(), pdfH = pdf.internal.pageSize.getHeight();
+      const m = 10 * u, gap = 1.8 * u;
+      const C = { ink: [29, 35, 39], muted: [108, 118, 127], line: [217, 222, 226], soft: [247, 248, 249], accent: [47, 111, 106] };
+      const f = frames[i] || {};
+
+      const clip = (s, maxW) => {
+        s = String(s); if (pdf.getTextWidth(s) <= maxW) return s;
+        while (s.length > 1 && pdf.getTextWidth(s + '...') > maxW) s = s.slice(0, -1);
+        return s.replace(/\s+$/, '') + '...';
+      };
+      const fitLines = (text, maxW, maxLines) => {
+        const t = String(text == null ? '' : text).trim() || '-';
+        let lines = pdf.splitTextToSize(t, maxW);
+        if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] += '...'; }
+        return lines.map(l => clip(l, maxW));
+      };
+      const frame = (x, y, w, h, fill) => {
+        pdf.setDrawColor(...C.line); pdf.setLineWidth(0.25 * u); pdf.setFillColor(...(fill || C.soft));
+        pdf.roundedRect(x, y, w, h, 1.2 * u, 1.2 * u, 'FD');
+      };
+      const box = (x, y, w, h, label, value, maxLines) => {
+        frame(x, y, w, h);
+        pdf.setFont('SpaceMono', 'normal'); pdf.setFontSize(5.8 * u); pdf.setTextColor(...C.muted);
+        pdf.text(label, x + 2 * u, y + 3.4 * u);
+        pdf.setFont('SpaceMono', 'bold'); pdf.setFontSize(8.6 * u); pdf.setTextColor(...C.ink);
+        fitLines(value, w - 4 * u, maxLines).forEach((ln, k) => pdf.text(ln, x + 2 * u, y + 7.4 * u + k * 3.7 * u));
+      };
+
+      // --- Kanvas ---
+      const imgW = 196 * u, imgH = imgW / 1.6;
+      pdf.addImage(dataUrl, 'JPEG', m, m, imgW, imgH);
+      pdf.setDrawColor(...C.line); pdf.setLineWidth(0.3 * u); pdf.rect(m, m, imgW, imgH, 'S');
+
+      // --- Kotak metadata (kolom kanan) ---
+      const colX = m + imgW + 4 * u, colW = pdfW - m - colX;
+      const pairW = (colW - gap) / 2;
+      let y = m;
+      const row1 = (l, v) => { box(colX, y, colW, 10 * u, l, v, 1); y += 10 * u + gap; };
+      const row2 = (l, v) => { box(colX, y, colW, 14 * u, l, v, 2); y += 14 * u + gap; };
+      const pair = (l1, v1, l2, v2) => { box(colX, y, pairW, 10 * u, l1, v1, 1); box(colX + pairW + gap, y, pairW, 10 * u, l2, v2, 1); y += 10 * u + gap; };
+
+      const shapeName = { proscenium: 'Prosenium', thrust: 'Thrust', arena: 'Arena' }[stageConfig.shape] || stageConfig.shape;
+      const venue = [projectMeta.venue, projectMeta.city].filter(Boolean).join(', ');
+      row2('Judul Pertunjukan', projectMeta.title || 'Tanpa Judul');
+      row1('Penggarap', projectMeta.director);
+      row1('Produksi / Kelompok', projectMeta.group);
+      row1('Penata Panggung / Artistik', projectMeta.designer);
+      row2('Lokasi / Venue', venue);
+      pair('Tanggal Pentas', fmtDate(projectMeta.showDate), 'Tanggal Draf', fmtDate(projectMeta.draftDate));
+      pair('Draf Desain Ke-', String(projectMeta.draftNo || 1), 'Status', projectMeta.status || 'Draf');
+      pair('Bentuk Panggung', shapeName, 'Ukuran Panggung', `${stageConfig.widthM} x ${stageConfig.depthM} m`);
+      pair('Adegan', `${i + 1} dari ${frames.length}`, 'Babak', f.act);
+      row2('Judul Adegan', f.title);
+      row2('Cue Teknis', f.cue);
+      pair('Durasi', f.duration, 'Dicetak', new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }));
+
+      // --- Legenda (posisi bawah) ---
+      const lh = 26 * u, lx = m, lw = pdfW - 2 * m, ly = pdfH - m - lh;
+
+      // --- Catatan (di bawah kanvas) ---
+      const ny = m + imgH + 3 * u, nh = ly - 3 * u - ny, nw = imgW;
+      frame(m, ny, nw, nh);
+      pdf.setFont('SpaceMono', 'normal'); pdf.setFontSize(5.8 * u); pdf.setTextColor(...C.muted);
+      pdf.text('Catatan Naskah / Instruksi', m + 2.5 * u, ny + 3.8 * u);
+      const note = String(f.note || '').trim() || '-';
+      const availH = nh - 7.5 * u; let fs = 9.5, lines = [], lineH = 0;
+      pdf.setFont('SpaceMono', 'normal'); pdf.setTextColor(...C.ink); pdf.setLineHeightFactor(1.35);
+      for (; fs >= 6; fs -= 0.5) {
+        pdf.setFontSize(fs * u); lines = pdf.splitTextToSize(note, nw - 5 * u);
+        lineH = fs * u * 0.3528 * 1.35; if (lines.length * lineH <= availH) break;
+      }
+      const maxLines = Math.max(1, Math.floor(availH / lineH));
+      if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] += '...'; lines = lines.map(l => clip(l, nw - 5 * u)); }
+      pdf.text(lines, m + 2.5 * u, ny + 7.8 * u);
+
+      frame(lx, ly, lw, lh, [255, 255, 255]);
+      pdf.setFont('SpaceMono', 'bold'); pdf.setFontSize(7.5 * u); pdf.setTextColor(...C.ink);
+      pdf.text('Legenda', lx + 3 * u, ly + 5.2 * u);
+      let cx = lx + 3 * u + pdf.getTextWidth('Legenda') + 7 * u; const cy = ly + 4.4 * u;
+
+      const key = (label, sym, symW) => {
+        sym(cx, cy);
+        pdf.setFont('SpaceMono', 'normal'); pdf.setFontSize(6.6 * u); pdf.setTextColor(...C.ink);
+        pdf.text(label, cx + symW + 2 * u, cy + 0.9 * u);
+        cx += symW + 2 * u + pdf.getTextWidth(label) + 6 * u;
+      };
+      key('Aktor', (x, yy) => {
+        pdf.setFillColor(...C.accent); pdf.circle(x + 1.8 * u, yy, 1.8 * u, 'F');
+        pdf.setFillColor(255, 255, 255); pdf.circle(x + 1.8 * u, yy - 1.5 * u, 0.5 * u, 'F');
+      }, 3.6 * u);
+      key('Properti', (x, yy) => { pdf.setFillColor(138, 148, 156); pdf.roundedRect(x, yy - 1.5 * u, 4.6 * u, 3 * u, 0.6 * u, 0.6 * u, 'F'); }, 4.6 * u);
+      if (config.vector) key('Perpindahan dari adegan sebelumnya', (x, yy) => {
+        pdf.setDrawColor(...C.muted); pdf.setLineWidth(0.3 * u); pdf.setLineDashPattern([0.7 * u, 0.6 * u], 0);
+        pdf.line(x, yy, x + 3.4 * u, yy); pdf.setLineDashPattern([], 0);
+        pdf.setFillColor(...C.muted); pdf.triangle(x + 5 * u, yy, x + 3.4 * u, yy - 1 * u, x + 3.4 * u, yy + 1 * u, 'F');
+      }, 5 * u);
+      if (config.onion) key('Posisi adegan sebelumnya', (x, yy) => { pdf.setFillColor(205, 221, 219); pdf.circle(x + 1.8 * u, yy, 1.8 * u, 'F'); }, 3.6 * u);
+      if (config.grid) key('Garis grid = 1 meter', (x, yy) => {
+        pdf.setDrawColor(...C.muted); pdf.setLineWidth(0.2 * u); pdf.rect(x, yy - 1.7 * u, 4.6 * u, 3.4 * u, 'S');
+        pdf.line(x + 2.3 * u, yy - 1.7 * u, x + 2.3 * u, yy + 1.7 * u); pdf.line(x, yy, x + 4.6 * u, yy);
+      }, 4.6 * u);
+
+      pdf.setDrawColor(...C.line); pdf.setLineWidth(0.25 * u); pdf.line(lx + 3 * u, ly + 8.6 * u, lx + lw - 3 * u, ly + 8.6 * u);
+
+      pdf.setFont('SpaceMono', 'bold'); pdf.setFontSize(6.4 * u); pdf.setTextColor(...C.muted);
+      pdf.text('Aktor & properti', lx + 3 * u, ly + 14.2 * u);
+      const x0 = lx + 3 * u + pdf.getTextWidth('Aktor & properti') + 5 * u, maxX = lx + lw - 3 * u;
+      pdf.setFont('SpaceMono', 'normal'); pdf.setFontSize(7 * u);
+      const layout = (maxX2) => {
+        const out = []; let row = 0, x = x0;
+        for (const it of legend) {
+          const label = clip(it.label, 40 * u); const w = 6.2 * u + pdf.getTextWidth(label) + 5 * u;
+          if (x + w > (row === 0 ? maxX : maxX2)) { row++; x = x0; if (row > 1) break; }
+          out.push({ it, label, x, row }); x += w;
+        }
+        return out;
+      };
+      let placed = layout(maxX);
+      if (placed.length < legend.length) placed = layout(maxX - 24 * u);
+      if (!legend.length) { pdf.setTextColor(...C.muted); pdf.text('Belum ada aktor atau properti.', x0, ly + 14.2 * u); }
+      placed.forEach(p => {
+        const by = ly + (p.row === 0 ? 14.2 : 20.4) * u;
+        pdf.setFillColor(...hexToRgb(p.it.color));
+        if (p.it.type === 'actor') pdf.circle(p.x + 1.6 * u, by - 0.9 * u, 1.6 * u, 'F');
+        else pdf.roundedRect(p.x, by - 2.3 * u, 3.8 * u, 2.8 * u, 0.5 * u, 0.5 * u, 'F');
+        pdf.setFont('SpaceMono', 'normal'); pdf.setFontSize(7 * u); pdf.setTextColor(...C.ink);
+        pdf.text(p.label, p.x + 6.2 * u - 1 * u, by);
+      });
+      if (placed.length < legend.length) {
+        pdf.setFont('SpaceMono', 'italic'); pdf.setFontSize(6.6 * u); pdf.setTextColor(...C.muted);
+        pdf.text(`+${legend.length - placed.length} lainnya`, maxX, ly + 20.4 * u, { align: 'right' });
+      }
+    }
+
+    // PERUBAHAN: blok baru untuk memuat & mendaftarkan font Space Mono ke jsPDF
+    const PDF_FONT_BASE = 'https://cdn.jsdelivr.net/gh/googlefonts/spacemono@329858c2c4dbd3476f972a4ae00624b018cf4b81/fonts/ttf/';
+    const PDF_FONT_FILES = [
+      { file: 'SpaceMono-Regular.ttf', style: 'normal' },
+      { file: 'SpaceMono-Bold.ttf',    style: 'bold' },
+      { file: 'SpaceMono-Italic.ttf',  style: 'italic' }
+    ];
+    let pdfFontCache = null;
+
+    async function fetchPdfFonts() {
+      if (pdfFontCache) return pdfFontCache;
+      pdfFontCache = await Promise.all(PDF_FONT_FILES.map(async f => {
+        const res = await fetch(PDF_FONT_BASE + f.file);
+        if (!res.ok) throw new Error('Gagal memuat ' + f.file);
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        return { ...f, b64: btoa(bin) };
+      }));
+      return pdfFontCache;
+    }
+
+    function registerPdfFonts(pdf, fonts) {
+      fonts.forEach(f => { pdf.addFileToVFS(f.file, f.b64); pdf.addFont(f.file, 'SpaceMono', f.style); });
+    }
+
+    async function processPDF() {
+      if (isExporting) return;
+      isExporting = true;
+      const paperSize = document.getElementById('pdfPaper').value; const { jsPDF } = window.jspdf;
+      const orig = currentFrameIndex;
+      closeModal('exportModal'); showLoader();
+      try {
+        await nextPaint();
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: paperSize });
+        registerPdfFonts(pdf, await fetchPdfFonts()); // PERUBAHAN: daftarkan Space Mono
+        const u = pdf.internal.pageSize.getWidth() / 297;
+        const legend = collectLegend();
+        tr.nodes([]); mainLayer.draw();
+
+        for (let i = 0; i < frames.length; i++) {
+          setLoader(i, frames.length, 'Merender adegan…', `Adegan ${i + 1} dari ${frames.length}`);
+          await nextPaint();
+          currentFrameIndex = i; renderCurrentFrame();
+          const dataUrl = stage.toDataURL({ mimeType: 'image/jpeg', quality: 0.9, pixelRatio: 5 });
+          if (i > 0) pdf.addPage();
+          drawPdfPage(pdf, u, i, dataUrl, legend);
+        }
+
+        setLoader(frames.length, frames.length, 'Menyimpan berkas PDF…', 'Hampir selesai');
+        await nextPaint();
+        pdf.save(`${projectMeta.title ? projectMeta.title.replace(/\s+/g, '-').toLowerCase() : 'blocking-dokumen'}.pdf`);
+        setLoader(frames.length, frames.length, 'Selesai', 'PDF berhasil dibuat');
+        await wait(700);
+      } catch (err) {
+        console.error(err); alert('Gagal membuat PDF. Silakan coba lagi.');
+      } finally {
+        hideLoader(); currentFrameIndex = orig; renderCurrentFrame(); isExporting = false;
+      }
+    }
+
+    // --- Shortcuts ---
+    window.addEventListener('keydown', (e) => {
+      if (isExporting) return;
+      if(document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT') return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); return; }
+      if(e.code === 'Space') { e.preventDefault(); playAnimation(); }
+      if(e.code === 'ArrowRight') { if(currentFrameIndex < frames.length-1) switchFrame(currentFrameIndex + 1); }
+      if(e.code === 'ArrowLeft') { if(currentFrameIndex > 0) switchFrame(currentFrameIndex - 1); }
+      if(e.code === 'Delete' || e.code === 'Backspace') { deleteSelectedToken(); }
+    });
+
+    drawGridLayer(); renderCurrentFrame();
+  </script>
+</body>
+</html>
